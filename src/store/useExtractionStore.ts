@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { ExtractionResult } from '@shared/types';
+import { ExtractionResult, CloudDocument, DocumentVersion, CloudPagination } from '@shared/types';
 import { saveAudit, getAudits, deleteAudit as dbDeleteAudit } from '@/lib/db';
+import { api } from '@/lib/api-client';
 import { toast } from 'sonner';
 type ProcessingStep = 'idle' | 'reading' | 'ocr' | 'analyzing' | 'success' | 'error';
 interface ExtractionState {
@@ -8,6 +9,9 @@ interface ExtractionState {
   error: string | null;
   result: ExtractionResult | null;
   history: ExtractionResult[];
+  cloudHistory: CloudDocument[];
+  isSyncing: boolean;
+  cloudSyncEnabled: boolean;
   startExtraction: (step?: ProcessingStep) => void;
   setProcessingStep: (step: ProcessingStep) => void;
   setSuccess: (payload: ExtractionResult) => Promise<void>;
@@ -16,6 +20,10 @@ interface ExtractionState {
   loadHistory: () => Promise<void>;
   deleteHistoryItem: (id: string) => Promise<void>;
   setResult: (result: ExtractionResult) => void;
+  // Cloud Actions
+  fetchCloudHistory: () => Promise<void>;
+  syncToCloud: (result: ExtractionResult) => Promise<void>;
+  toggleCloudSync: () => void;
 }
 async function generateFingerprint(text: string): Promise<string> {
   try {
@@ -32,13 +40,16 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
   error: null,
   result: null,
   history: [],
+  cloudHistory: [],
+  isSyncing: false,
+  cloudSyncEnabled: localStorage.getItem('cloudSyncEnabled') === 'true',
   startExtraction: (step = 'reading') => set({ status: step, error: null, result: null }),
   setProcessingStep: (step) => set({ status: step }),
   setSuccess: async (payload) => {
     const fingerprint = await generateFingerprint(payload.rawText);
     const history = get().history;
     if (history.some(h => h.fingerprint === fingerprint)) {
-      toast.warning('Note: This document appears to be a duplicate of a previous analysis.');
+      toast.warning('Duplicate detected in local history');
     }
     await saveAudit(payload);
     set(state => ({
@@ -47,6 +58,9 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
       result: payload,
       history: [payload, ...state.history]
     }));
+    if (get().cloudSyncEnabled) {
+      get().syncToCloud(payload);
+    }
   },
   setError: (message) => set({ status: 'error', error: message, result: null }),
   reset: () => set({ status: 'idle', error: null, result: null }),
@@ -60,7 +74,42 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
       history: state.history.filter(h => h.id !== id),
       result: state.result?.id === id ? null : state.result
     }));
-    toast.success('Record removed from local history');
+    toast.success('Record removed');
   },
-  setResult: (result) => set({ result, status: 'success' })
+  setResult: (result) => set({ result, status: 'success' }),
+  fetchCloudHistory: async () => {
+    try {
+      const data = await api<CloudPagination<CloudDocument>>('/api/documents');
+      set({ cloudHistory: data.items });
+    } catch (err) {
+      console.warn('Failed to fetch cloud history:', err);
+    }
+  },
+  syncToCloud: async (result) => {
+    set({ isSyncing: true });
+    try {
+      // Create document record
+      const doc = await api<CloudDocument>('/api/documents', {
+        method: 'POST',
+        body: JSON.stringify({ fileName: result.fileName })
+      });
+      // Save version
+      await api<DocumentVersion>(`/api/documents/${doc.id}/versions`, {
+        method: 'POST',
+        body: JSON.stringify({ label: 'Initial Sync', result })
+      });
+      toast.success('Synced to Cloud Vault');
+      get().fetchCloudHistory();
+    } catch (err) {
+      toast.error('Cloud sync failed');
+    } finally {
+      set({ isSyncing: false });
+    }
+  },
+  toggleCloudSync: () => {
+    const newVal = !get().cloudSyncEnabled;
+    set({ cloudSyncEnabled: newVal });
+    localStorage.setItem('cloudSyncEnabled', String(newVal));
+    toast.info(newVal ? 'Cloud Sync Enabled' : 'Cloud Sync Disabled');
+  }
 }));

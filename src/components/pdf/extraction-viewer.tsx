@@ -6,19 +6,23 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  FileCode, 
-  FileText, 
-  RotateCcw, 
-  Copy, 
-  Check, 
-  Download, 
-  AlertTriangle, 
-  Scale, 
-  Table as TableIcon, 
-  ShieldAlert, 
-  Gavel, 
-  ExternalLink 
+import {
+  FileCode,
+  FileText,
+  RotateCcw,
+  Copy,
+  Check,
+  Download,
+  AlertTriangle,
+  Scale,
+  Table as TableIcon,
+  ShieldAlert,
+  Gavel,
+  ExternalLink,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  History as HistoryIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VerificationWorkspace } from './verification-workspace';
@@ -27,12 +31,16 @@ import { cn } from '@/lib/utils';
 export function ExtractionViewer() {
   const result = useExtractionStore((s) => s.result);
   const reset = useExtractionStore((s) => s.reset);
+  const isSyncing = useExtractionStore((s) => s.isSyncing);
+  const syncToCloud = useExtractionStore((s) => s.syncToCloud);
+  const cloudHistory = useExtractionStore((s) => s.cloudHistory);
   const [copied, setCopied] = useState(false);
   if (!result) return null;
+  const isSynced = cloudHistory.some(doc => doc.fileName === result.fileName);
   const handleCopy = () => {
     navigator.clipboard.writeText(JSON.stringify(result, null, 2));
     setCopied(true);
-    toast.success('Audit data copied to clipboard');
+    toast.success('Audit data copied');
     setTimeout(() => setCopied(false), 2000);
   };
   const downloadJSON = () => {
@@ -43,18 +51,8 @@ export function ExtractionViewer() {
     a.download = `audit_${result.fileName.replace(/\s+/g, '_')}.json`;
     a.click();
   };
-  const exportToCSV = () => {
-    const headers = ['Type', 'Label', 'Value', 'Benchmark', 'Variance', 'Status'];
-    const rows = result.costAnalysis.map(c => [
-      'CPT', c.label, c.charged, c.benchmark, `${c.variance}%`, c.status
-    ]);
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `audit_${result.fileName.replace(/\s+/g, '_')}.csv`;
-    a.click();
+  const handleSync = async () => {
+    if (result) await syncToCloud(result);
   };
   const severeViolations = result.costAnalysis.filter(c => c.status === 'Severe');
   const isLowConfidence = result.confidence.score < 0.7;
@@ -69,17 +67,29 @@ export function ExtractionViewer() {
                 <AlertTriangle className="w-3 h-3" /> Review Required
               </Badge>
             )}
+            {isSynced ? (
+              <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border-emerald-100">
+                <Cloud className="w-3 h-3" /> Cloud Synced
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1 text-slate-400">
+                <CloudOff className="w-3 h-3" /> Local Only
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-slate-500">
             {result.pageCount} Pages • {result.confidence.method === 'ocr' ? 'OCR Extraction' : 'Native Extraction'}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {!isSynced && (
+            <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing} className="gap-2 text-blue-600 border-blue-100 hover:bg-blue-50">
+              {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
+              Sync to Vault
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={downloadJSON} className="gap-2">
             <FileCode className="w-4 h-4" /> JSON
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportToCSV} className="gap-2">
-            <Download className="w-4 h-4" /> CSV
           </Button>
           <Button variant="secondary" size="sm" onClick={reset} className="gap-2">
             <RotateCcw className="w-4 h-4" /> New Audit
@@ -98,18 +108,12 @@ export function ExtractionViewer() {
                   <h3 className="text-lg font-bold text-red-900 dark:text-red-200">Legal Action Recommended: PA Act 102 Violation</h3>
                   <p className="text-sm text-red-800 dark:text-red-300">
                     We detected {severeViolations.length} items with charges exceeding 50% above market benchmarks.
-                    This may constitute an unfair trade practice under Pennsylvania Act 102.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Button size="sm" className="bg-red-700 hover:bg-red-800 gap-2 shadow-sm" asChild>
                     <a href="https://www.attorneygeneral.gov/submit-a-complaint/" target="_blank" rel="noopener noreferrer">
                       File AG Complaint <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </Button>
-                  <Button size="sm" variant="outline" className="border-red-300 text-red-900 hover:bg-red-100" asChild>
-                    <a href="https://www.phc4.org/" target="_blank" rel="noopener noreferrer">
-                      View Price Reports <ExternalLink className="w-3 h-3" />
                     </a>
                   </Button>
                 </div>
@@ -124,11 +128,11 @@ export function ExtractionViewer() {
              </div>
              <div>
                <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Security Audit</p>
-               <p className="text-sm font-semibold">PHI Redaction Active</p>
+               <p className="text-sm font-semibold">Cloud Persistence Ready</p>
              </div>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            All Patient Health Information (SSNs, DOBs, IDs) has been automatically redacted in the workspace. No data has left your browser.
+            Data is redacted before viewing. Syncing to the Cloud Vault enables cross-device history using secure Durable Object storage.
           </p>
         </Card>
       </div>
@@ -152,7 +156,7 @@ export function ExtractionViewer() {
             <TabsContent value="tables" className="m-0 focus-visible:outline-none">
               <div className="space-y-4">
                 {result.tables.length === 0 ? (
-                  <div className="py-20 text-center text-muted-foreground border-2 border-dashed rounded-xl">No clear tables detected in this document.</div>
+                  <div className="py-20 text-center text-muted-foreground border-2 border-dashed rounded-xl">No tables detected.</div>
                 ) : (
                   result.tables.map((table, i) => (
                     <Card key={i} className="overflow-hidden">
@@ -181,7 +185,7 @@ export function ExtractionViewer() {
                   <div className="p-4 border-b bg-slate-50/50 flex items-center gap-2 font-medium">
                     <FileText className="w-4 h-4 text-primary" /> Redacted Text
                   </div>
-                  <ScrollArea className="flex-1 p-6 font-mono text-xs whitespace-pre-wrap bg-white dark:bg-slate-950">
+                  <ScrollArea className="flex-1 p-6 font-mono text-xs whitespace-pre-wrap">
                     {result.redactedText}
                   </ScrollArea>
                 </Card>

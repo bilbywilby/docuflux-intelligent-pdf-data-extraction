@@ -64,3 +64,25 @@ export interface ExtractionResult {
   pageCount: number;
   pageImages?: string[];
 }
+/**
+ * Cloud Persistence Types
+ */
+export interface CloudDocument {
+  id: string;
+  fileName: string;
+  currentVersionId: string;
+  createdAt: string;
+  updatedAt: string;
+  ownerId: string;
+}
+export interface DocumentVersion {
+  id: string;
+  documentId: string;
+  label: string;
+  result: ExtractionResult;
+  createdAt: string;
+}
+export interface CloudPagination<T> {
+  items: T[];
+  next: string | null;
+}

@@ -1,75 +1,78 @@
 import { Hono } from "hono";
 import type { Env } from './core-utils';
-import { UserEntity, ChatBoardEntity } from "./entities";
+import { UserEntity, ChatBoardEntity, DocumentEntity, VersionEntity } from "./entities";
 import { ok, bad, notFound, isStr } from './core-utils';
-
+import type { ExtractionResult, CloudDocument, DocumentVersion } from "@shared/types";
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
-  app.get('/api/test', (c) => c.json({ success: true, data: { name: 'CF Workers Demo' }}));
-
-  // USERS
+  app.get('/api/test', (c) => c.json({ success: true, data: { name: 'DocuFlux API' }}));
+  // DOCUMENTS
+  app.get('/api/documents', async (c) => {
+    const cursor = c.req.query('cursor');
+    const limit = c.req.query('limit');
+    const page = await DocumentEntity.list(c.env, cursor ?? null, limit ? Number(limit) : 20);
+    return ok(c, page);
+  });
+  app.post('/api/documents', async (c) => {
+    const { fileName } = await c.req.json() as { fileName: string };
+    if (!fileName) return bad(c, 'fileName required');
+    const doc: CloudDocument = {
+      id: crypto.randomUUID(),
+      fileName,
+      currentVersionId: "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ownerId: "anonymous"
+    };
+    return ok(c, await DocumentEntity.create(c.env, doc));
+  });
+  app.get('/api/documents/:id', async (c) => {
+    const doc = new DocumentEntity(c.env, c.req.param('id'));
+    if (!await doc.exists()) return notFound(c, 'Document not found');
+    return ok(c, await doc.getState());
+  });
+  // VERSIONS
+  app.get('/api/documents/:id/versions', async (c) => {
+    const docId = c.req.param('id');
+    const versions = await VersionEntity.listByDocument(c.env, docId);
+    return ok(c, versions);
+  });
+  app.post('/api/documents/:id/versions', async (c) => {
+    const docId = c.req.param('id');
+    const { label, result } = await c.req.json() as { label: string, result: ExtractionResult };
+    const docEntity = new DocumentEntity(c.env, docId);
+    if (!await docEntity.exists()) return notFound(c, 'Document not found');
+    const version: DocumentVersion = {
+      id: crypto.randomUUID(),
+      documentId: docId,
+      label: label || 'Manual Save',
+      result,
+      createdAt: new Date().toISOString()
+    };
+    const created = await VersionEntity.createForDocument(c.env, version);
+    // Update document's primary version pointer
+    await docEntity.patch({
+      currentVersionId: created.id,
+      updatedAt: created.createdAt
+    });
+    return ok(c, created);
+  });
+  app.put('/api/documents/:id/promote', async (c) => {
+    const docId = c.req.param('id');
+    const { versionId } = await c.req.json() as { versionId: string };
+    const docEntity = new DocumentEntity(c.env, docId);
+    const verEntity = new VersionEntity(c.env, versionId);
+    if (!await docEntity.exists()) return notFound(c, 'Document not found');
+    if (!await verEntity.exists()) return notFound(c, 'Version not found');
+    await docEntity.patch({
+      currentVersionId: versionId,
+      updatedAt: new Date().toISOString()
+    });
+    return ok(c, { success: true });
+  });
+  // LEGACY ROUTES
   app.get('/api/users', async (c) => {
     await UserEntity.ensureSeed(c.env);
-    const cq = c.req.query('cursor');
-    const lq = c.req.query('limit');
-    const page = await UserEntity.list(c.env, cq ?? null, lq ? Math.max(1, (Number(lq) | 0)) : undefined);
+    const page = await UserEntity.list(c.env, c.req.query('cursor') ?? null);
     return ok(c, page);
-  });
-
-  app.post('/api/users', async (c) => {
-    const { name } = (await c.req.json()) as { name?: string };
-    if (!name?.trim()) return bad(c, 'name required');
-    return ok(c, await UserEntity.create(c.env, { id: crypto.randomUUID(), name: name.trim() }));
-  });
-
-  // CHATS
-  app.get('/api/chats', async (c) => {
-    await ChatBoardEntity.ensureSeed(c.env);
-    const cq = c.req.query('cursor');
-    const lq = c.req.query('limit');
-    const page = await ChatBoardEntity.list(c.env, cq ?? null, lq ? Math.max(1, (Number(lq) | 0)) : undefined);
-    return ok(c, page);
-  });
-
-  app.post('/api/chats', async (c) => {
-    const { title } = (await c.req.json()) as { title?: string };
-    if (!title?.trim()) return bad(c, 'title required');
-    const created = await ChatBoardEntity.create(c.env, { id: crypto.randomUUID(), title: title.trim(), messages: [] });
-    return ok(c, { id: created.id, title: created.title });
-  });
-
-  // MESSAGES
-  app.get('/api/chats/:chatId/messages', async (c) => {
-    const chat = new ChatBoardEntity(c.env, c.req.param('chatId'));
-    if (!await chat.exists()) return notFound(c, 'chat not found');
-    return ok(c, await chat.listMessages());
-  });
-
-  app.post('/api/chats/:chatId/messages', async (c) => {
-    const chatId = c.req.param('chatId');
-    const { userId, text } = (await c.req.json()) as { userId?: string; text?: string };
-    if (!isStr(userId) || !text?.trim()) return bad(c, 'userId and text required');
-    const chat = new ChatBoardEntity(c.env, chatId);
-    if (!await chat.exists()) return notFound(c, 'chat not found');
-    return ok(c, await chat.sendMessage(userId, text.trim()));
-  });
-
-  // DELETE: Users
-  app.delete('/api/users/:id', async (c) => ok(c, { id: c.req.param('id'), deleted: await UserEntity.delete(c.env, c.req.param('id')) }));
-
-  app.post('/api/users/deleteMany', async (c) => {
-    const { ids } = (await c.req.json()) as { ids?: string[] };
-    const list = ids?.filter(isStr) ?? [];
-    if (list.length === 0) return bad(c, 'ids required');
-    return ok(c, { deletedCount: await UserEntity.deleteMany(c.env, list), ids: list });
-  });
-
-  // DELETE: Chats
-  app.delete('/api/chats/:id', async (c) => ok(c, { id: c.req.param('id'), deleted: await ChatBoardEntity.delete(c.env, c.req.param('id')) }));
-
-  app.post('/api/chats/deleteMany', async (c) => {
-    const { ids } = (await c.req.json()) as { ids?: string[] };
-    const list = ids?.filter(isStr) ?? [];
-    if (list.length === 0) return bad(c, 'ids required');
-    return ok(c, { deletedCount: await ChatBoardEntity.deleteMany(c.env, list), ids: list });
   });
 }
