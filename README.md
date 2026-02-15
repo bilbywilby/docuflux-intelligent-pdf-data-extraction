@@ -1,6 +1,6 @@
 # Cloudflare Workers Full-Stack Template
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bilbywilby/docuflux-intelligent-pdf-data-extraction)
 
 A production-ready full-stack application template built on Cloudflare Workers, featuring Durable Objects for stateful entities, a modern React frontend with shadcn/ui, and TanStack Query for data fetching. This template demonstrates a real-time chat application with users, chat boards, and messages, using a shared Global Durable Object for efficient multi-entity storage.
 
@@ -93,7 +93,7 @@ wrangler deploy
 
 Configures automatic asset serving, Durable Objects, and SPA fallback.
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bilbywilby/docuflux-intelligent-pdf-data-extraction)
 
 **Bindings**: Ensure `GlobalDurableObject` is bound in `wrangler.jsonc`.
 
