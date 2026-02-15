@@ -5,10 +5,25 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { FileCode, FileText, RotateCcw, Copy, Check, Download, AlertTriangle, Scale, Table as TableIcon, ShieldAlert, Gavel, ExternalLink } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { 
+  FileCode, 
+  FileText, 
+  RotateCcw, 
+  Copy, 
+  Check, 
+  Download, 
+  AlertTriangle, 
+  Scale, 
+  Table as TableIcon, 
+  ShieldAlert, 
+  Gavel, 
+  ExternalLink 
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { VerificationWorkspace } from './verification-workspace';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
 export function ExtractionViewer() {
   const result = useExtractionStore((s) => s.result);
   const reset = useExtractionStore((s) => s.reset);
@@ -82,7 +97,7 @@ export function ExtractionViewer() {
                 <div>
                   <h3 className="text-lg font-bold text-red-900 dark:text-red-200">Legal Action Recommended: PA Act 102 Violation</h3>
                   <p className="text-sm text-red-800 dark:text-red-300">
-                    We detected {severeViolations.length} items with charges exceeding 50% above market benchmarks. 
+                    We detected {severeViolations.length} items with charges exceeding 50% above market benchmarks.
                     This may constitute an unfair trade practice under Pennsylvania Act 102.
                   </p>
                 </div>

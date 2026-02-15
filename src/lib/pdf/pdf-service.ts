@@ -72,8 +72,7 @@ export async function extractPdfData(file: File, onProgress?: (step: string) => 
     onProgress?.('Analyzing structure...');
     const redactedText = redactPHI(fullText);
     const structured = parseStructuredData(fullText);
-    const rawCostAnalysis = extractCostAnalysis(fullText);
-    const costAnalysis = rawCostAnalysis.map(c => ({ ...c, id: crypto.randomUUID() }));
+    const costAnalysis = extractCostAnalysis(fullText);
     const tables = detectTables(fullText);
     return {
       rawText: fullText,

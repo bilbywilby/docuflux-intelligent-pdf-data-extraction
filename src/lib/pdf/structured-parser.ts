@@ -101,6 +101,7 @@ export function extractCostAnalysis(text: string): CostAnalysis[] {
           if (variance > 50) status = 'Severe';
           else if (variance > 30) status = 'Overpriced';
           results.push({
+            id: crypto.randomUUID(),
             cpt,
             label: benchmark.label,
             charged,

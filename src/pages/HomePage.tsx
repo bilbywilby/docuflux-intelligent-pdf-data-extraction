@@ -6,7 +6,7 @@ import { ExtractionViewer } from '@/components/pdf/extraction-viewer';
 import { ExtractionHistory } from '@/components/pdf/extraction-history';
 import { useExtractionStore } from '@/store/useExtractionStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles, ShieldCheck, History, PlusCircle, AlertCircle, Lock, Zap, FileSearch } from 'lucide-react';
+import { Sparkles, ShieldCheck, History, PlusCircle, AlertCircle, Lock, Zap, FileSearch, Gavel } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 export function HomePage() {
   const status = useExtractionStore((s) => s.status);
