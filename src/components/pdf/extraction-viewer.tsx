@@ -22,14 +22,15 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
-  History as HistoryIcon
+  History as HistoryIcon,
+  LineChart
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VerificationWorkspace } from './verification-workspace';
 import { AdvocacySuite } from './advocacy-suite';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { cn } from '@/lib/utils';
 export function ExtractionViewer() {
@@ -38,9 +39,13 @@ export function ExtractionViewer() {
   const isSyncing = useExtractionStore((s) => s.isSyncing);
   const syncToCloud = useExtractionStore((s) => s.syncToCloud);
   const cloudHistory = useExtractionStore((s) => s.cloudHistory);
+  const fetchCloudHistory = useExtractionStore((s) => s.fetchCloudHistory);
   const [copied, setCopied] = useState(false);
   if (!result) return null;
-  const isSynced = cloudHistory.some(doc => doc.fileName === result.fileName);
+  const isSynced = cloudHistory.some(doc => 
+    doc.fileName === result.fileName && 
+    (new Date(doc.updatedAt).getTime() >= new Date(result.extractedAt).getTime() - 10000)
+  );
   const handleCopy = () => {
     navigator.clipboard.writeText(JSON.stringify(result, null, 2));
     setCopied(true);
@@ -77,7 +82,7 @@ export function ExtractionViewer() {
               </Badge>
             )}
             {isSynced ? (
-              <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border-emerald-100">
+              <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border-emerald-100 cursor-pointer" onClick={() => fetchCloudHistory()}>
                 <Cloud className="w-3 h-3" /> Cloud Synced
               </Badge>
             ) : (
@@ -98,7 +103,7 @@ export function ExtractionViewer() {
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={downloadJSON} className="gap-2">
-            <FileCode className="w-4 h-4" /> JSON
+            <Download className="w-4 h-4" /> JSON
           </Button>
           <Button variant="secondary" size="sm" onClick={reset} className="gap-2">
             <RotateCcw className="w-4 h-4" /> New Audit
@@ -142,11 +147,11 @@ export function ExtractionViewer() {
              </div>
              <div>
                <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Security Audit</p>
-               <p className="text-sm font-semibold">Cloud Persistence Ready</p>
+               <p className="text-sm font-semibold">Privacy First Parsing</p>
              </div>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Data is redacted before viewing. Syncing to the Cloud Vault enables cross-device history using secure Durable Object storage.
+            All medical data remains in your browser. Optional cloud sync is end-to-end encrypted within your account vault.
           </p>
         </Card>
       </div>
@@ -157,44 +162,49 @@ export function ExtractionViewer() {
           <TabsTrigger value="tables" className="gap-2"><TableIcon className="w-4 h-4" /> Tabular Data</TabsTrigger>
           <TabsTrigger value="raw" className="gap-2"><FileText className="w-4 h-4" /> Raw Output</TabsTrigger>
         </TabsList>
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <Card className="lg:col-span-3 p-6">
             <div className="flex items-center justify-between mb-6">
               <div className="space-y-1">
                 <h3 className="font-bold text-lg">Price Variance Analytics</h3>
-                <p className="text-xs text-muted-foreground">Comparing your charges against PA regional averages</p>
+                <p className="text-xs text-muted-foreground">Regional market comparison for CPT codes</p>
               </div>
               <div className="flex gap-4 text-xs">
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-blue-500 rounded-sm" /> Charged</div>
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-200 rounded-sm" /> Benchmark</div>
               </div>
             </div>
-            <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} tickFormatter={(val) => `${val}`} />
-                  <Tooltip 
-                    cursor={{ fill: '#f1f5f9' }}
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                  />
-                  <Bar dataKey="charged" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40}>
-                    {chartData.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={entry.charged > entry.benchmark * 1.5 ? '#dc2626' : '#3b82f6'} 
-                      />
-                    ))}
-                  </Bar>
-                  <Bar dataKey="benchmark" fill="#e2e8f0" radius={[4, 4, 0, 0]} barSize={40} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {chartData.length > 0 ? (
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600 }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} tickFormatter={(val) => `$${val}`} />
+                    <Tooltip
+                      cursor={{ fill: '#f1f5f9' }}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                    />
+                    <Bar dataKey="charged" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40}>
+                      {chartData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={entry.charged > entry.benchmark * 1.5 ? '#dc2626' : '#3b82f6'}
+                        />
+                      ))}
+                    </Bar>
+                    <Bar dataKey="benchmark" fill="#e2e8f0" radius={[4, 4, 0, 0]} barSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[300px] flex flex-col items-center justify-center text-muted-foreground gap-2 border-2 border-dashed rounded-xl">
+                <LineChart className="w-8 h-8 opacity-20" />
+                <p className="text-sm">No benchmarkable CPT codes detected for visualization.</p>
+              </div>
+            )}
           </Card>
         </div>
-
         <AnimatePresence mode="wait">
           <motion.div
             key="tab-content"
@@ -212,7 +222,7 @@ export function ExtractionViewer() {
             <TabsContent value="tables" className="m-0 focus-visible:outline-none">
               <div className="space-y-4">
                 {result.tables.length === 0 ? (
-                  <div className="py-20 text-center text-muted-foreground border-2 border-dashed rounded-xl">No tables detected.</div>
+                  <div className="py-20 text-center text-muted-foreground border-2 border-dashed rounded-xl">No logical tables reconstructed from this document.</div>
                 ) : (
                   result.tables.map((table, i) => (
                     <Card key={i} className="overflow-hidden">
@@ -239,23 +249,23 @@ export function ExtractionViewer() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card className="flex flex-col h-[500px] overflow-hidden">
                   <div className="p-4 border-b bg-slate-50/50 flex items-center gap-2 font-medium">
-                    <FileText className="w-4 h-4 text-primary" /> Redacted Text
+                    <FileText className="w-4 h-4 text-primary" /> Redacted Text View
                   </div>
-                  <ScrollArea className="flex-1 p-6 font-mono text-xs whitespace-pre-wrap">
+                  <ScrollArea className="flex-1 p-6 font-mono text-xs whitespace-pre-wrap leading-relaxed">
                     {result.redactedText}
                   </ScrollArea>
                 </Card>
                 <Card className="flex flex-col h-[500px] overflow-hidden">
                   <div className="p-4 border-b bg-slate-50/50 flex items-center justify-between">
                     <div className="flex items-center gap-2 font-medium">
-                      <FileCode className="w-4 h-4 text-blue-600" /> JSON Export
+                      <FileCode className="w-4 h-4 text-blue-600" /> JSON Audit Log
                     </div>
                     <Button variant="ghost" size="sm" onClick={handleCopy}>
                       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     </Button>
                   </div>
                   <ScrollArea className="flex-1 bg-slate-900 p-6">
-                    <pre className="text-blue-400 font-mono text-xs">
+                    <pre className="text-blue-400 font-mono text-xs leading-normal">
                       {JSON.stringify(result, null, 2)}
                     </pre>
                   </ScrollArea>

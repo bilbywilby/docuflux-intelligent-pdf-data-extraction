@@ -20,7 +20,6 @@ interface ExtractionState {
   loadHistory: () => Promise<void>;
   deleteHistoryItem: (id: string) => Promise<void>;
   setResult: (result: ExtractionResult) => void;
-  // Cloud Actions
   fetchCloudHistory: () => Promise<void>;
   syncToCloud: (result: ExtractionResult) => Promise<void>;
   toggleCloudSync: () => void;
@@ -35,6 +34,10 @@ async function generateFingerprint(text: string): Promise<string> {
     return text.length.toString() + text.slice(0, 50);
   }
 }
+const getStoredSyncState = () => {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem('cloudSyncEnabled') === 'true';
+};
 export const useExtractionStore = create<ExtractionState>((set, get) => ({
   status: 'idle',
   error: null,
@@ -42,7 +45,7 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
   history: [],
   cloudHistory: [],
   isSyncing: false,
-  cloudSyncEnabled: localStorage.getItem('cloudSyncEnabled') === 'true',
+  cloudSyncEnabled: getStoredSyncState(),
   startExtraction: (step = 'reading') => set({ status: step, error: null, result: null }),
   setProcessingStep: (step) => set({ status: step }),
   setSuccess: async (payload) => {
@@ -88,39 +91,35 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
   setResult: (result) => set({ result, status: 'success' }),
   fetchCloudHistory: async () => {
     try {
-      // Correct pagination structure from API response
       const response = await api<CloudPagination<CloudDocument>>('/api/documents');
       if (response && Array.isArray(response.items)) {
         set({ cloudHistory: response.items });
-      } else {
-        console.warn('Invalid cloud history format received:', response);
       }
     } catch (err) {
-      // Silently fail if cloud is unreachable but log for debug
-      console.warn('Failed to fetch cloud history:', err);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.warn(`[Vault] Cloud history fetch failed: ${errorMsg}`);
     }
   },
   syncToCloud: async (result) => {
     set({ isSyncing: true });
     try {
-      // 1. Create or Find document record
       const doc = await api<CloudDocument>('/api/documents', {
         method: 'POST',
         body: JSON.stringify({ fileName: result.fileName })
       });
-      // 2. Save document version
       await api<DocumentVersion>(`/api/documents/${doc.id}/versions`, {
         method: 'POST',
-        body: JSON.stringify({ 
-          label: `Audit ${new Date().toLocaleDateString()}`, 
-          result 
+        body: JSON.stringify({
+          label: `Audit ${new Date().toLocaleDateString()}`,
+          result
         })
       });
       toast.success('Synced to Cloud Vault');
       await get().fetchCloudHistory();
     } catch (err) {
-      console.error('Sync error:', err);
-      toast.error('Cloud sync failed');
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[Vault] Sync error:', errorMsg);
+      toast.error(`Cloud sync failed: ${errorMsg}`);
     } finally {
       set({ isSyncing: false });
     }

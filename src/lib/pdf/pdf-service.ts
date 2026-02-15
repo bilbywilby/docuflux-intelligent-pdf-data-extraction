@@ -12,6 +12,7 @@ async function capturePageSnapshot(page: any, scale = 1.5): Promise<string> {
   await page.render({ canvasContext: context, viewport }).promise;
   return canvas.toDataURL('image/jpeg', 0.8);
 }
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export async function extractPdfData(file: File, onProgress?: (step: string) => void) {
   const arrayBuffer = await file.arrayBuffer();
   const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
@@ -20,16 +21,15 @@ export async function extractPdfData(file: File, onProgress?: (step: string) => 
     if (pdf.numPages > 50) {
       throw new Error("Maximum 50 pages allowed for browser processing.");
     }
-    onProgress?.('Generating page snapshots...');
+    onProgress?.('Initializing layers...');
     const pageImages: string[] = [];
     const maxSnapshots = 10;
-    onProgress?.('Reading document layers...');
     let fullText = '';
     let totalNativeTextLength = 0;
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
-      // Capture snapshots for verification workspace (limit to first 10 for memory)
       if (i <= maxSnapshots) {
+        onProgress?.(`Capturing page ${i}...`);
         const snapshot = await capturePageSnapshot(page);
         pageImages.push(snapshot);
       }
@@ -44,32 +44,40 @@ export async function extractPdfData(file: File, onProgress?: (step: string) => 
       const pageText = groupByLines(items);
       fullText += pageText + '\n';
       totalNativeTextLength += pageText.trim().length;
+      // Yield main thread
+      if (i % 5 === 0) await sleep(10);
     }
     let method: 'native' | 'ocr' = 'native';
     let confidenceScore = 0.95;
     const flaggedReasons: string[] = [];
-    // Trigger OCR Fallback if native text is suspiciously sparse
     if (totalNativeTextLength < 50 && pdf.numPages > 0) {
-      onProgress?.('Running OCR fallback...');
+      onProgress?.('Running OCR fallback engine...');
       method = 'ocr';
       fullText = '';
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2.0 });
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        if (context) {
-          await page.render({ canvasContext: context, viewport }).promise;
-          const { data: { text, confidence } } = await Tesseract.recognize(canvas, 'eng');
-          fullText += text + '\n';
-          confidenceScore = Math.min(confidenceScore, confidence / 100);
+      const worker = await Tesseract.createWorker('eng');
+      try {
+        for (let i = 1; i <= pdf.numPages; i++) {
+          onProgress?.(`OCR processing page ${i}/${pdf.numPages}...`);
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 2.0 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+          if (context) {
+            await page.render({ canvasContext: context, viewport }).promise;
+            const { data: { text, confidence } } = await worker.recognize(canvas);
+            fullText += text + '\n';
+            confidenceScore = Math.min(confidenceScore, confidence / 100);
+          }
+          await sleep(10);
         }
+      } finally {
+        await worker.terminate();
       }
       if (confidenceScore < 0.7) flaggedReasons.push('Low OCR confidence');
     }
-    onProgress?.('Analyzing structure...');
+    onProgress?.('Finalizing audit structure...');
     const redactedText = redactPHI(fullText);
     const structured = parseStructuredData(fullText);
     const costAnalysis = extractCostAnalysis(fullText);
@@ -89,9 +97,11 @@ export async function extractPdfData(file: File, onProgress?: (step: string) => 
       }
     };
   } catch (error) {
-    console.error('PDF Extraction Error:', error);
+    console.error('[PDF Service] Extraction Failed:', error);
     throw error;
   } finally {
-    loadingTask.destroy();
+    if (loadingTask) {
+      loadingTask.destroy();
+    }
   }
 }

@@ -37,20 +37,19 @@ export const DocumentSchema = z.object({
     totalAmount: z.string().optional(),
     currency: z.string().optional(),
     vendor: z.string().optional(),
-  }),
+  }).default({}),
 });
 export type DocumentData = z.infer<typeof DocumentSchema>;
 export function redactPHI(text: string): string {
   let redacted = text;
   const patterns = [
     /\b\d{3}-\d{2}-\d{4}\b/g, // SSN
-    /\b\d{10}\b/g, // NPI (10 digits)
-    /\b\d{9}\b/g, // TaxID/SSN Alt
-    /\b\d{2}\/\d{2}\/\d{4}\b/g, // DOBS
-    /ACCOUNT:\s*[A-Z0-9-]+/gi,
-    /PATIENT ID:\s*[A-Z0-9-]+/gi,
-    /MEMBER ID:\s*[A-Z0-9-]+/gi,
-    /PHONE:\s*\d{3}-\d{3}-\d{4}/gi,
+    /\b(?!(?:9\d{4}|[0-9]{4}[A-Z]))\d{9,12}\b/g, // General IDs (excluding CPT-like patterns)
+    /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, // Dates (DOB/Service)
+    /ACCOUNT[:\s]+[A-Z0-9-]+/gi,
+    /PATIENT[:\s]+[A-Z\s,]+/gi,
+    /MEMBER ID[:\s]+[A-Z0-9-]+/gi,
+    /PHONE[:\s]+\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/gi,
     /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, // Emails
   ];
   patterns.forEach(p => {
@@ -91,11 +90,11 @@ export function extractCostAnalysis(text: string): CostAnalysis[] {
     if (PA_COST_BENCHMARKS[cpt]) {
       const benchmark = PA_COST_BENCHMARKS[cpt];
       const pos = text.indexOf(cpt);
-      const context = text.slice(Math.max(0, pos - 100), Math.min(text.length, pos + 200));
+      const context = text.slice(Math.max(0, pos - 150), Math.min(text.length, pos + 250));
       const amountMatch = context.match(/(?:\$|USD)\s*([\d,]+\.\d{2})/i);
       if (amountMatch) {
         const charged = normalizeCurrency(amountMatch[1]);
-        if (charged > 0 && charged < 50000) {
+        if (charged > 0 && charged < 100000) {
           const variance = ((charged - benchmark.avg) / benchmark.avg) * 100;
           let status: CostAnalysis['status'] = 'Normal';
           if (variance > 50) status = 'Severe';
@@ -121,18 +120,30 @@ export function extractCostAnalysis(text: string): CostAnalysis[] {
 }
 export function parseStructuredData(text: string): DocumentData {
   const data: Partial<DocumentData['entities']> = {};
-  const invoicePattern = /(?:Invoice|Inv|Claim)\s*(?:#|No\.?|Num)?\s*:?\s*([A-Z0-9-]+)/i;
+  const invoicePattern = /(?:Invoice|Inv|Claim|Account|Statement)\s*(?:#|No\.?|Num)?\s*:?\s*([A-Z0-9-]+)/i;
   const datePattern = /(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|(?:\w{3,9}\s\d{1,2},?\s\d{4})/i;
   const invMatch = text.match(invoicePattern);
   if (invMatch) data.invoiceNumber = invMatch[1];
   const dateMatch = text.match(datePattern);
   if (dateMatch) data.date = dateMatch[0];
   let type = 'Medical Document';
-  if (text.toLowerCase().includes('explanation of benefits')) type = 'EOB';
-  else if (text.toLowerCase().includes('statement')) type = 'Medical Statement';
-  return DocumentSchema.parse({
+  const lowerText = text.toLowerCase();
+  if (lowerText.includes('explanation of benefits')) type = 'EOB';
+  else if (lowerText.includes('statement')) type = 'Medical Statement';
+  else if (lowerText.includes('invoice')) type = 'Medical Invoice';
+  const rawData = {
     documentType: type,
     confidence: 0.85,
     entities: data
-  });
+  };
+  const result = DocumentSchema.safeParse(rawData);
+  if (!result.success) {
+    console.warn('[Parser] Validation failed, returning partial data:', result.error);
+    return {
+      documentType: type,
+      confidence: 0.5,
+      entities: {}
+    };
+  }
+  return result.data;
 }
