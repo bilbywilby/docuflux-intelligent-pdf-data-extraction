@@ -24,11 +24,17 @@ export function HomePage() {
   const isProcessing = status !== 'idle' && status !== 'success' && status !== 'error';
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans selection:bg-blue-100 selection:text-blue-900">
+      <div className="fixed inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.05] z-0" 
+           style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+      
       <ThemeToggle />
       <div className="bg-slate-900 text-white py-2.5 px-4 text-center text-xs font-medium flex items-center justify-center gap-2 border-b border-white/10 relative z-50">
         <Lock className="w-3.5 h-3.5 text-emerald-400" />
         Zero-Knowledge local parsing. Optional Cloud Vault for persistence.
       </div>
+
+      <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-50/50 to-transparent dark:from-blue-900/10 dark:to-transparent -z-10" />
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="py-8 md:py-12 lg:py-16">
           <AnimatePresence mode="wait">
@@ -80,15 +86,15 @@ export function HomePage() {
                   <TabsContent value="new" className="space-y-12 focus-visible:outline-none">
                     <div className="max-w-2xl">
                       <PdfUploader />
-                      <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
                         {[
                           { icon: Gavel, title: "Act 102 Laws", desc: "Checks compliance with PA medical pricing mandates." },
                           { icon: FileSearch, title: "CPT Benchmarks", desc: "Verifies charges against national fair market rates." },
                           { icon: Cloud, title: "Cloud Vault", desc: "Securely persist audit records across your devices." }
                         ].map((feature, i) => (
-                          <div key={i} className="space-y-3">
-                            <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-900 border shadow-sm flex items-center justify-center">
-                              <feature.icon className="w-5 h-5 text-blue-600" />
+                          <div key={i} className="group space-y-4 p-4 rounded-xl hover:bg-white dark:hover:bg-slate-900 transition-all duration-300 border border-transparent hover:border-slate-100 dark:hover:border-slate-800">
+                            <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center transition-transform group-hover:scale-110">
+                              <feature.icon className="w-6 h-6 text-blue-600" />
                             </div>
                             <h4 className="font-bold text-sm">{feature.title}</h4>
                             <p className="text-xs text-muted-foreground leading-relaxed">{feature.desc}</p>
@@ -115,11 +121,11 @@ export function HomePage() {
           </AnimatePresence>
         </div>
       </main>
-      <footer className="border-t bg-white dark:bg-slate-950/50 py-16 mt-20">
+      <footer className="border-t bg-white dark:bg-slate-900 py-20 mt-20 relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-12">
             <div className="space-y-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 grayscale hover:grayscale-0 transition-all">
                 <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white text-xl shadow-lg shadow-blue-500/20">D</div>
                 <div className="text-lg font-black text-slate-900 dark:text-white tracking-tight">DocuFlux Medical</div>
               </div>
@@ -132,7 +138,7 @@ export function HomePage() {
               <span className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-yellow-500" /> PA Act 102 Integrated</span>
             </div>
           </div>
-          <div className="mt-16 pt-8 border-t text-center">
+          <div className="mt-16 pt-8 border-t border-slate-100 dark:border-slate-800 text-center">
             <p className="text-xs text-slate-400">© 2024 DocuFlux. Informational only. Not medical or legal advice.</p>
           </div>
         </div>

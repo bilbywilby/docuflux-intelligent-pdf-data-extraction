@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useExtractionStore } from '@/store/useExtractionStore';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,13 @@ export function VerificationWorkspace() {
   const result = useExtractionStore((s) => s.result);
   const [verifiedIds, setVerifiedIds] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
   if (!result || !result.pageImages) return null;
   const toggleVerify = (id: string) => {
     const newSet = new Set(verifiedIds);
@@ -18,9 +25,12 @@ export function VerificationWorkspace() {
     else newSet.add(id);
     setVerifiedIds(newSet);
   };
+  const verifyAll = () => {
+    setVerifiedIds(new Set(result.costAnalysis.map(i => i.id)));
+  };
   return (
-    <div className="h-[800px] border rounded-xl overflow-hidden bg-white dark:bg-slate-950">
-      <ResizablePanelGroup direction="horizontal">
+    <div className="h-[600px] lg:h-[800px] border rounded-xl overflow-hidden bg-white dark:bg-slate-950">
+      <ResizablePanelGroup direction={isMobile ? "vertical" : "horizontal"}>
         <ResizablePanel defaultSize={50} minSize={30}>
           <div className="flex flex-col h-full bg-slate-100 dark:bg-slate-900/50">
             <div className="p-3 border-b bg-white dark:bg-slate-950 flex items-center justify-between">
@@ -62,10 +72,13 @@ export function VerificationWorkspace() {
         <ResizablePanel defaultSize={50} minSize={30}>
           <div className="flex flex-col h-full bg-white dark:bg-slate-950">
             <div className="p-3 border-b flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Extracted Audit Items</span>
-              <Badge variant="outline" className="text-2xs">
-                {verifiedIds.size} / {result.costAnalysis.length} Verified
-              </Badge>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Extracted Audit Items</span>
+                <Badge variant="outline" className="text-2xs">
+                  {verifiedIds.size} / {result.costAnalysis.length} Verified
+                </Badge>
+              </div>
+              <Button variant="ghost" size="sm" onClick={verifyAll} className="text-2xs h-7">Verify All</Button>
             </div>
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-3">
@@ -75,7 +88,7 @@ export function VerificationWorkspace() {
                     className={cn(
                       "p-4 transition-all duration-200 border-l-4",
                       verifiedIds.has(item.id) ? "border-l-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/10" : "border-l-slate-200",
-                      item.status === 'Severe' && !verifiedIds.has(item.id) && "border-l-red-500"
+                      item.status === 'Severe' && !verifiedIds.has(item.id) && "border-l-red-500 animate-pulse"
                     )}
                   >
                     <div className="flex items-start justify-between gap-4">

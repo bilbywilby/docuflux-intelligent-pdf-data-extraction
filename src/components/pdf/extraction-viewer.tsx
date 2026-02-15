@@ -9,12 +9,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   FileCode,
   FileText,
+  Scale,
   RotateCcw,
   Copy,
   Check,
   Download,
   AlertTriangle,
-  Scale,
   Table as TableIcon,
   ShieldAlert,
   Gavel,
@@ -26,7 +26,11 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VerificationWorkspace } from './verification-workspace';
+import { AdvocacySuite } from './advocacy-suite';
 import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend
+} from 'recharts';
 import { cn } from '@/lib/utils';
 export function ExtractionViewer() {
   const result = useExtractionStore((s) => s.result);
@@ -54,6 +58,11 @@ export function ExtractionViewer() {
   const handleSync = async () => {
     if (result) await syncToCloud(result);
   };
+  const chartData = result.costAnalysis.map(item => ({
+    name: item.cpt,
+    charged: item.charged,
+    benchmark: item.benchmark,
+  }));
   const severeViolations = result.costAnalysis.filter(c => c.status === 'Severe');
   const isLowConfidence = result.confidence.score < 0.7;
   return (
@@ -116,6 +125,11 @@ export function ExtractionViewer() {
                       File AG Complaint <ExternalLink className="w-3 h-3" />
                     </a>
                   </Button>
+                  <Button variant="outline" size="sm" className="border-red-300 text-red-800 hover:bg-red-100" asChild>
+                    <a href="#advocacy">
+                      Generate Dispute Letter
+                    </a>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -139,9 +153,48 @@ export function ExtractionViewer() {
       <Tabs defaultValue="verify" className="space-y-6">
         <TabsList className="bg-slate-100 dark:bg-slate-900">
           <TabsTrigger value="verify" className="gap-2"><Scale className="w-4 h-4" /> Verification Workspace</TabsTrigger>
+          <TabsTrigger value="advocacy" className="gap-2" id="advocacy"><Gavel className="w-4 h-4" /> Advocacy & Rights</TabsTrigger>
           <TabsTrigger value="tables" className="gap-2"><TableIcon className="w-4 h-4" /> Tabular Data</TabsTrigger>
           <TabsTrigger value="raw" className="gap-2"><FileText className="w-4 h-4" /> Raw Output</TabsTrigger>
         </TabsList>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <Card className="lg:col-span-3 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="space-y-1">
+                <h3 className="font-bold text-lg">Price Variance Analytics</h3>
+                <p className="text-xs text-muted-foreground">Comparing your charges against PA regional averages</p>
+              </div>
+              <div className="flex gap-4 text-xs">
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-blue-500 rounded-sm" /> Charged</div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-200 rounded-sm" /> Benchmark</div>
+              </div>
+            </div>
+            <div className="h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} tickFormatter={(val) => `${val}`} />
+                  <Tooltip 
+                    cursor={{ fill: '#f1f5f9' }}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                  />
+                  <Bar dataKey="charged" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40}>
+                    {chartData.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={entry.charged > entry.benchmark * 1.5 ? '#dc2626' : '#3b82f6'} 
+                      />
+                    ))}
+                  </Bar>
+                  <Bar dataKey="benchmark" fill="#e2e8f0" radius={[4, 4, 0, 0]} barSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </div>
+
         <AnimatePresence mode="wait">
           <motion.div
             key="tab-content"
@@ -152,6 +205,9 @@ export function ExtractionViewer() {
           >
             <TabsContent value="verify" className="m-0 focus-visible:outline-none">
               <VerificationWorkspace />
+            </TabsContent>
+            <TabsContent value="advocacy" className="m-0 focus-visible:outline-none">
+              <AdvocacySuite />
             </TabsContent>
             <TabsContent value="tables" className="m-0 focus-visible:outline-none">
               <div className="space-y-4">
