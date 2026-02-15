@@ -1,25 +1,16 @@
 import { create } from 'zustand';
-import { CostAnalysis } from '@/lib/pdf/structured-parser';
+import { ExtractionResult } from '@shared/types';
 import { saveAudit, getAudits, deleteAudit as dbDeleteAudit } from '@/lib/db';
 import { toast } from 'sonner';
-export interface ExtractionResult {
-  id: string;
-  fileName: string;
-  rawText: string;
-  redactedText: string;
-  structuredData: Record<string, any>;
-  costAnalysis: CostAnalysis[];
-  extractedAt: string;
-  fingerprint: string;
-}
-type Status = 'idle' | 'processing' | 'success' | 'error';
+type ProcessingStep = 'idle' | 'reading' | 'ocr' | 'analyzing' | 'success' | 'error';
 interface ExtractionState {
-  status: Status;
+  status: ProcessingStep;
   error: string | null;
   result: ExtractionResult | null;
   history: ExtractionResult[];
-  startExtraction: () => void;
-  setSuccess: (result: Omit<ExtractionResult, 'id' | 'fingerprint'>) => Promise<void>;
+  startExtraction: (step?: ProcessingStep) => void;
+  setProcessingStep: (step: ProcessingStep) => void;
+  setSuccess: (payload: ExtractionResult) => Promise<void>;
   setError: (message: string) => void;
   reset: () => void;
   loadHistory: () => Promise<void>;
@@ -41,24 +32,20 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
   error: null,
   result: null,
   history: [],
-  startExtraction: () => set({ status: 'processing', error: null, result: null }),
-  setSuccess: async (partialResult) => {
-    const fingerprint = await generateFingerprint(partialResult.rawText);
+  startExtraction: (step = 'reading') => set({ status: step, error: null, result: null }),
+  setProcessingStep: (step) => set({ status: step }),
+  setSuccess: async (payload) => {
+    const fingerprint = await generateFingerprint(payload.rawText);
     const history = get().history;
     if (history.some(h => h.fingerprint === fingerprint)) {
-      toast.warning('This document has already been analyzed. Check history.');
+      toast.warning('Note: This document appears to be a duplicate of a previous analysis.');
     }
-    const fullResult: ExtractionResult = {
-      ...partialResult,
-      id: crypto.randomUUID(),
-      fingerprint
-    };
-    await saveAudit(fullResult);
+    await saveAudit(payload);
     set(state => ({
       status: 'success',
       error: null,
-      result: fullResult,
-      history: [fullResult, ...state.history]
+      result: payload,
+      history: [payload, ...state.history]
     }));
   },
   setError: (message) => set({ status: 'error', error: message, result: null }),
@@ -73,7 +60,7 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
       history: state.history.filter(h => h.id !== id),
       result: state.result?.id === id ? null : state.result
     }));
-    toast.success('Audit deleted from local history');
+    toast.success('Record removed from local history');
   },
   setResult: (result) => set({ result, status: 'success' })
 }));

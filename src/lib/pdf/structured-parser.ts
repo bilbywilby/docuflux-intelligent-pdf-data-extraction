@@ -1,8 +1,5 @@
 import { z } from 'zod';
-import { CostAnalysis, ACT_REFERENCE } from '@shared/types';
-/**
- * PA Medical Billing Audit Benchmarks & Legal References (Act 102)
- */
+import { CostAnalysis, ACT_REFERENCE, TableData } from '@shared/types';
 export const PA_COST_BENCHMARKS: Record<string, { avg: number; label: string }> = {
   '99213': { avg: 75, label: 'Office Visit (Low-Moderate)' },
   '99214': { avg: 110, label: 'Office Visit (Moderate-High)' },
@@ -43,28 +40,49 @@ export const DocumentSchema = z.object({
   }),
 });
 export type DocumentData = z.infer<typeof DocumentSchema>;
-/**
- * Redacts PHI patterns to ensure privacy before display.
- */
 export function redactPHI(text: string): string {
   let redacted = text;
   const patterns = [
     /\b\d{3}-\d{2}-\d{4}\b/g, // SSN
-    /\b\d{9}\b/g, // NPI/TaxID
-    /\b\d{2}\/\d{2}\/\d{4}\b/g, // Birthdates/Dates
-    /ACCOUNT:\s*\d+/gi,
-    /PATIENT ID:\s*[\w-]+/gi,
-    /MEMBER ID:\s*[\w-]+/gi,
-    /\b\d{5}-\d{4}\b/g, // Zip+4
+    /\b\d{10}\b/g, // NPI (10 digits)
+    /\b\d{9}\b/g, // TaxID/SSN Alt
+    /\b\d{2}\/\d{2}\/\d{4}\b/g, // DOBS
+    /ACCOUNT:\s*[A-Z0-9-]+/gi,
+    /PATIENT ID:\s*[A-Z0-9-]+/gi,
+    /MEMBER ID:\s*[A-Z0-9-]+/gi,
+    /PHONE:\s*\d{3}-\d{3}-\d{4}/gi,
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, // Emails
   ];
   patterns.forEach(p => {
     redacted = redacted.replace(p, '[REDACTED]');
   });
   return redacted;
 }
-/**
- * Extracts and analyzes medical costs against PA benchmarks.
- */
+export function normalizeCurrency(val: string): number {
+  const clean = val.replace(/[^\d.-]/g, '');
+  return parseFloat(clean) || 0;
+}
+export function detectTables(text: string): TableData[] {
+  const lines = text.split('\n');
+  const tables: TableData[] = [];
+  let currentRows: string[][] = [];
+  lines.forEach(line => {
+    const parts = line.split(/\s{2,}/).map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+      currentRows.push(parts);
+    } else if (currentRows.length > 0) {
+      if (currentRows.length >= 2) {
+        tables.push({
+          headers: currentRows[0],
+          rows: currentRows.slice(1),
+          confidence: 0.8
+        });
+      }
+      currentRows = [];
+    }
+  });
+  return tables;
+}
 export function extractCostAnalysis(text: string): CostAnalysis[] {
   const results: CostAnalysis[] = [];
   const cptRegex = /\b(9\d{4}|[0-9]{4}[A-Z])\b/g;
@@ -73,11 +91,11 @@ export function extractCostAnalysis(text: string): CostAnalysis[] {
     if (PA_COST_BENCHMARKS[cpt]) {
       const benchmark = PA_COST_BENCHMARKS[cpt];
       const pos = text.indexOf(cpt);
-      const window = text.slice(Math.max(0, pos - 150), Math.min(text.length, pos + 300));
-      const amountMatch = window.match(/(?:\$|USD)\s*([\d,]+\.\d{2})/i);
+      const context = text.slice(Math.max(0, pos - 100), Math.min(text.length, pos + 200));
+      const amountMatch = context.match(/(?:\$|USD)\s*([\d,]+\.\d{2})/i);
       if (amountMatch) {
-        const charged = parseFloat(amountMatch[1].replace(/,/g, ''));
-        if (charged > 0 && charged < 100000) {
+        const charged = normalizeCurrency(amountMatch[1]);
+        if (charged > 0 && charged < 50000) {
           const variance = ((charged - benchmark.avg) / benchmark.avg) * 100;
           let status: CostAnalysis['status'] = 'Normal';
           if (variance > 50) status = 'Severe';
@@ -102,18 +120,15 @@ export function extractCostAnalysis(text: string): CostAnalysis[] {
 }
 export function parseStructuredData(text: string): DocumentData {
   const data: Partial<DocumentData['entities']> = {};
-  const invoicePattern = /(?:Invoice|Inv)\s*(?:#|No\.?|Num)?\s*:?\s*([A-Z0-9-]+)/i;
+  const invoicePattern = /(?:Invoice|Inv|Claim)\s*(?:#|No\.?|Num)?\s*:?\s*([A-Z0-9-]+)/i;
   const datePattern = /(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|(?:\w{3,9}\s\d{1,2},?\s\d{4})/i;
-  const amountPattern = /(?:Total|Amount|Balance|Due)\s*:?\s*(?:\$|USD|EUR|£)?\s*([\d,]+\.\d{2})/i;
   const invMatch = text.match(invoicePattern);
   if (invMatch) data.invoiceNumber = invMatch[1];
   const dateMatch = text.match(datePattern);
   if (dateMatch) data.date = dateMatch[0];
-  const amountMatch = text.match(amountPattern);
-  if (amountMatch) data.totalAmount = amountMatch[1];
-  let type = 'Generic Document';
-  if (text.toLowerCase().includes('invoice')) type = 'Medical Invoice';
-  else if (text.toLowerCase().includes('explanation of benefits') || text.includes('EOB')) type = 'EOB';
+  let type = 'Medical Document';
+  if (text.toLowerCase().includes('explanation of benefits')) type = 'EOB';
+  else if (text.toLowerCase().includes('statement')) type = 'Medical Statement';
   return DocumentSchema.parse({
     documentType: type,
     confidence: 0.85,

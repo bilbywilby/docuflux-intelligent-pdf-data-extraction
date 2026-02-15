@@ -28,6 +28,11 @@ export interface ACT_REFERENCE {
   remedy: string;
   complaintPath?: string;
 }
+export interface TableData {
+  headers: string[];
+  rows: string[][];
+  confidence: number;
+}
 export interface CostAnalysis {
   cpt: string;
   label: string;
@@ -38,13 +43,21 @@ export interface CostAnalysis {
   citation?: ACT_REFERENCE;
   financialNote?: string;
 }
+export interface ConfidenceInfo {
+  score: number;
+  flaggedReasons: string[];
+  method: 'native' | 'ocr';
+}
 export interface ExtractionResult {
   id: string;
   fileName: string;
   rawText: string;
   redactedText: string;
-  structuredData: Record<string, any>;
+  structuredData: any;
   costAnalysis: CostAnalysis[];
   extractedAt: string;
   fingerprint: string;
+  confidence: ConfidenceInfo;
+  tables: TableData[];
+  pageCount: number;
 }
