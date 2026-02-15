@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { FileCode, FileText, RotateCcw, Copy, Check, Download, AlertTriangle, Scale, Table as TableIcon } from 'lucide-react';
+import { FileCode, FileText, RotateCcw, Copy, Check, Download, AlertTriangle, Scale, Table as TableIcon, ShieldAlert, Gavel, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { VerificationWorkspace } from './verification-workspace';
+import { motion, AnimatePresence } from 'framer-motion';
 export function ExtractionViewer() {
   const result = useExtractionStore((s) => s.result);
   const reset = useExtractionStore((s) => s.reset);
@@ -17,6 +19,14 @@ export function ExtractionViewer() {
     setCopied(true);
     toast.success('Audit data copied to clipboard');
     setTimeout(() => setCopied(false), 2000);
+  };
+  const downloadJSON = () => {
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit_${result.fileName.replace(/\s+/g, '_')}.json`;
+    a.click();
   };
   const exportToCSV = () => {
     const headers = ['Type', 'Label', 'Value', 'Benchmark', 'Variance', 'Status'];
@@ -31,9 +41,10 @@ export function ExtractionViewer() {
     a.download = `audit_${result.fileName.replace(/\s+/g, '_')}.csv`;
     a.click();
   };
+  const severeViolations = result.costAnalysis.filter(c => c.status === 'Severe');
   const isLowConfidence = result.confidence.score < 0.7;
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-6">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -49,116 +60,135 @@ export function ExtractionViewer() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={exportToCSV} className="gap-2">
-            <Download className="w-4 h-4" /> Export CSV
+          <Button variant="outline" size="sm" onClick={downloadJSON} className="gap-2">
+            <FileCode className="w-4 h-4" /> JSON
           </Button>
-          <Button variant="outline" size="sm" onClick={reset} className="gap-2">
+          <Button variant="outline" size="sm" onClick={exportToCSV} className="gap-2">
+            <Download className="w-4 h-4" /> CSV
+          </Button>
+          <Button variant="secondary" size="sm" onClick={reset} className="gap-2">
             <RotateCcw className="w-4 h-4" /> New Audit
           </Button>
         </div>
       </div>
-      {isLowConfidence && (
-        <Card className="p-4 bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900 flex gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-          <div className="text-sm text-amber-800 dark:text-amber-200">
-            <p className="font-semibold">Low Confidence Score ({Math.round(result.confidence.score * 100)}%)</p>
-            <p>This document was processed via OCR or has complex formatting. Please manually verify the extracted amounts against the original document.</p>
-          </div>
-        </Card>
-      )}
-      <Tabs defaultValue="analysis" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="analysis" className="gap-2"><Scale className="w-4 h-4" /> Cost Analysis</TabsTrigger>
-          <TabsTrigger value="tables" className="gap-2"><TableIcon className="w-4 h-4" /> Detected Tables</TabsTrigger>
-          <TabsTrigger value="text" className="gap-2"><FileText className="w-4 h-4" /> Raw Data</TabsTrigger>
-        </TabsList>
-        <TabsContent value="analysis">
-          <Card className="overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>CPT Code</TableHead>
-                  <TableHead>Service</TableHead>
-                  <TableHead className="text-right">Charged</TableHead>
-                  <TableHead className="text-right">Benchmark</TableHead>
-                  <TableHead className="text-right">Variance</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {result.costAnalysis.map((row, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="font-mono">{row.cpt}</TableCell>
-                    <TableCell className="text-sm">{row.label}</TableCell>
-                    <TableCell className="text-right">${row.charged.toFixed(2)}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">${row.benchmark.toFixed(2)}</TableCell>
-                    <TableCell className={`text-right font-bold ${row.variance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {row.variance > 0 ? '+' : ''}{row.variance}%
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={row.status === 'Severe' ? 'destructive' : row.status === 'Overpriced' ? 'outline' : 'secondary'}>
-                        {row.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
-        </TabsContent>
-        <TabsContent value="tables">
-          <div className="space-y-4">
-            {result.tables.length === 0 ? (
-              <div className="py-12 text-center text-muted-foreground">No clear tables detected in this document.</div>
-            ) : (
-              result.tables.map((table, i) => (
-                <Card key={i} className="overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-slate-50 dark:bg-slate-900">
-                      <TableRow>
-                        {table.headers.map((h, j) => <TableHead key={j}>{h}</TableHead>)}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {table.rows.map((row, j) => (
-                        <TableRow key={j}>
-                          {row.map((cell, k) => <TableCell key={k}>{cell}</TableCell>)}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </Card>
-              ))
-            )}
-          </div>
-        </TabsContent>
-        <TabsContent value="text">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="flex flex-col h-[500px] overflow-hidden">
-              <div className="p-4 border-b bg-slate-50/50 flex items-center gap-2 font-medium">
-                <FileText className="w-4 h-4 text-primary" /> Redacted Text
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {severeViolations.length > 0 && (
+          <Card className="lg:col-span-2 p-6 bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900 overflow-hidden relative group">
+            <div className="relative z-10 flex flex-col md:flex-row gap-6">
+              <div className="w-12 h-12 rounded-xl bg-red-600 flex items-center justify-center shrink-0 shadow-lg">
+                <Gavel className="w-6 h-6 text-white" />
               </div>
-              <div className="flex-1 overflow-auto p-6 font-mono text-xs whitespace-pre-wrap bg-white dark:bg-slate-950">
-                {result.redactedText}
-              </div>
-            </Card>
-            <Card className="flex flex-col h-[500px] overflow-hidden">
-              <div className="p-4 border-b bg-slate-50/50 flex items-center justify-between">
-                <div className="flex items-center gap-2 font-medium">
-                  <FileCode className="w-4 h-4 text-blue-600" /> JSON Export
+              <div className="space-y-4 flex-1">
+                <div>
+                  <h3 className="text-lg font-bold text-red-900 dark:text-red-200">Legal Action Recommended: PA Act 102 Violation</h3>
+                  <p className="text-sm text-red-800 dark:text-red-300">
+                    We detected {severeViolations.length} items with charges exceeding 50% above market benchmarks. 
+                    This may constitute an unfair trade practice under Pennsylvania Act 102.
+                  </p>
                 </div>
-                <Button variant="ghost" size="sm" onClick={handleCopy}>
-                  {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                </Button>
+                <div className="flex flex-wrap gap-3">
+                  <Button size="sm" className="bg-red-700 hover:bg-red-800 gap-2 shadow-sm" asChild>
+                    <a href="https://www.attorneygeneral.gov/submit-a-complaint/" target="_blank" rel="noopener noreferrer">
+                      File AG Complaint <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </Button>
+                  <Button size="sm" variant="outline" className="border-red-300 text-red-900 hover:bg-red-100" asChild>
+                    <a href="https://www.phc4.org/" target="_blank" rel="noopener noreferrer">
+                      View Price Reports <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </Button>
+                </div>
               </div>
-              <div className="flex-1 overflow-auto bg-slate-900 p-6">
-                <pre className="text-blue-400 font-mono text-xs">
-                  {JSON.stringify(result, null, 2)}
-                </pre>
-              </div>
-            </Card>
+            </div>
+          </Card>
+        )}
+        <Card className={cn("p-6 flex flex-col justify-center", severeViolations.length === 0 && "lg:col-span-3")}>
+          <div className="flex items-center gap-3 mb-4">
+             <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+               <ShieldAlert className="w-5 h-5 text-blue-600" />
+             </div>
+             <div>
+               <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Security Audit</p>
+               <p className="text-sm font-semibold">PHI Redaction Active</p>
+             </div>
           </div>
-        </TabsContent>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            All Patient Health Information (SSNs, DOBs, IDs) has been automatically redacted in the workspace. No data has left your browser.
+          </p>
+        </Card>
+      </div>
+      <Tabs defaultValue="verify" className="space-y-6">
+        <TabsList className="bg-slate-100 dark:bg-slate-900">
+          <TabsTrigger value="verify" className="gap-2"><Scale className="w-4 h-4" /> Verification Workspace</TabsTrigger>
+          <TabsTrigger value="tables" className="gap-2"><TableIcon className="w-4 h-4" /> Tabular Data</TabsTrigger>
+          <TabsTrigger value="raw" className="gap-2"><FileText className="w-4 h-4" /> Raw Output</TabsTrigger>
+        </TabsList>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key="tab-content"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            <TabsContent value="verify" className="m-0 focus-visible:outline-none">
+              <VerificationWorkspace />
+            </TabsContent>
+            <TabsContent value="tables" className="m-0 focus-visible:outline-none">
+              <div className="space-y-4">
+                {result.tables.length === 0 ? (
+                  <div className="py-20 text-center text-muted-foreground border-2 border-dashed rounded-xl">No clear tables detected in this document.</div>
+                ) : (
+                  result.tables.map((table, i) => (
+                    <Card key={i} className="overflow-hidden">
+                      <Table>
+                        <TableHeader className="bg-slate-50 dark:bg-slate-900">
+                          <TableRow>
+                            {table.headers.map((h, j) => <TableHead key={j}>{h}</TableHead>)}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {table.rows.map((row, j) => (
+                            <TableRow key={j}>
+                              {row.map((cell, k) => <TableCell key={k}>{cell}</TableCell>)}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </TabsContent>
+            <TabsContent value="raw" className="m-0 focus-visible:outline-none">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="flex flex-col h-[500px] overflow-hidden">
+                  <div className="p-4 border-b bg-slate-50/50 flex items-center gap-2 font-medium">
+                    <FileText className="w-4 h-4 text-primary" /> Redacted Text
+                  </div>
+                  <ScrollArea className="flex-1 p-6 font-mono text-xs whitespace-pre-wrap bg-white dark:bg-slate-950">
+                    {result.redactedText}
+                  </ScrollArea>
+                </Card>
+                <Card className="flex flex-col h-[500px] overflow-hidden">
+                  <div className="p-4 border-b bg-slate-50/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-medium">
+                      <FileCode className="w-4 h-4 text-blue-600" /> JSON Export
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={handleCopy}>
+                      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    </Button>
+                  </div>
+                  <ScrollArea className="flex-1 bg-slate-900 p-6">
+                    <pre className="text-blue-400 font-mono text-xs">
+                      {JSON.stringify(result, null, 2)}
+                    </pre>
+                  </ScrollArea>
+                </Card>
+              </div>
+            </TabsContent>
+          </motion.div>
+        </AnimatePresence>
       </Tabs>
     </div>
   );

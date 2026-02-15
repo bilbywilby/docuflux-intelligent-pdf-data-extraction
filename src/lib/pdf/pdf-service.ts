@@ -2,6 +2,16 @@ import { pdfjs } from './pdf-worker';
 import { groupByLines, TextItem } from './layout-analyzer';
 import { parseStructuredData, redactPHI, extractCostAnalysis, detectTables } from './structured-parser';
 import Tesseract from 'tesseract.js';
+async function capturePageSnapshot(page: any, scale = 1.5): Promise<string> {
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  canvas.height = viewport.height;
+  canvas.width = viewport.width;
+  if (!context) return '';
+  await page.render({ canvasContext: context, viewport }).promise;
+  return canvas.toDataURL('image/jpeg', 0.8);
+}
 export async function extractPdfData(file: File, onProgress?: (step: string) => void) {
   const arrayBuffer = await file.arrayBuffer();
   const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
@@ -10,11 +20,19 @@ export async function extractPdfData(file: File, onProgress?: (step: string) => 
     if (pdf.numPages > 50) {
       throw new Error("Maximum 50 pages allowed for browser processing.");
     }
+    onProgress?.('Generating page snapshots...');
+    const pageImages: string[] = [];
+    const maxSnapshots = 10;
     onProgress?.('Reading document layers...');
     let fullText = '';
     let totalNativeTextLength = 0;
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
+      // Capture snapshots for verification workspace (limit to first 10 for memory)
+      if (i <= maxSnapshots) {
+        const snapshot = await capturePageSnapshot(page);
+        pageImages.push(snapshot);
+      }
       const content = await page.getTextContent();
       const items: TextItem[] = content.items.map((item: any) => ({
         str: item.str,
@@ -54,7 +72,8 @@ export async function extractPdfData(file: File, onProgress?: (step: string) => 
     onProgress?.('Analyzing structure...');
     const redactedText = redactPHI(fullText);
     const structured = parseStructuredData(fullText);
-    const costAnalysis = extractCostAnalysis(fullText);
+    const rawCostAnalysis = extractCostAnalysis(fullText);
+    const costAnalysis = rawCostAnalysis.map(c => ({ ...c, id: crypto.randomUUID() }));
     const tables = detectTables(fullText);
     return {
       rawText: fullText,
@@ -63,6 +82,7 @@ export async function extractPdfData(file: File, onProgress?: (step: string) => 
       costAnalysis,
       tables,
       pageCount: pdf.numPages,
+      pageImages,
       confidence: {
         score: confidenceScore,
         flaggedReasons,

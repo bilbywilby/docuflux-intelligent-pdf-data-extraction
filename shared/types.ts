@@ -34,6 +34,7 @@ export interface TableData {
   confidence: number;
 }
 export interface CostAnalysis {
+  id: string;
   cpt: string;
   label: string;
   charged: number;
@@ -42,6 +43,7 @@ export interface CostAnalysis {
   status: 'Normal' | 'Overpriced' | 'Severe';
   citation?: ACT_REFERENCE;
   financialNote?: string;
+  verified?: boolean;
 }
 export interface ConfidenceInfo {
   score: number;
@@ -60,4 +62,5 @@ export interface ExtractionResult {
   confidence: ConfidenceInfo;
   tables: TableData[];
   pageCount: number;
+  pageImages?: string[];
 }
