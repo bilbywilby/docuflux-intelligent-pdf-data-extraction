@@ -79,7 +79,8 @@ function updateWranglerJsonc() {
 function runSetupCommands() {
     const commands = [
     "bun add pdfjs-dist@^4.4.168",
-    "bun add react-dropzone@^14.2.3"
+    "bun add react-dropzone@^14.2.3",
+    "bun add tesseract.js@^5.1.1"
 ];
     
     if (commands.length === 0) {
