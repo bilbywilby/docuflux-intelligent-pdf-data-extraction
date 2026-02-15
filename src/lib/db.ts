@@ -1,12 +1,8 @@
-import { ExtractionResult } from '@shared/types';
+import { ExtractionResult } from '@/store/useExtractionStore';
 const DB_NAME = 'pa-audit-history';
 const STORE_NAME = 'audits';
 export async function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') {
-      reject(new Error('IndexedDB is not supported in this environment'));
-      return;
-    }
     const request = indexedDB.open(DB_NAME, 1);
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -22,42 +18,27 @@ export async function saveAudit(audit: ExtractionResult): Promise<void> {
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    await new Promise<void>((resolve, reject) => {
-      const request = store.put(audit);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
+    tx.objectStore(STORE_NAME).put(audit);
   } catch (err) {
-    console.warn('IndexedDB write failed:', err);
+    console.warn('IndexedDB write failed, falling back to session only', err);
   }
 }
 export async function getAudits(): Promise<ExtractionResult[]> {
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
+    const request = tx.objectStore(STORE_NAME).getAll();
     return new Promise((resolve, reject) => {
-      const request = store.getAll();
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
   } catch (err) {
-    console.warn('IndexedDB read failed:', err);
+    console.warn('IndexedDB read failed', err);
     return [];
   }
 }
 export async function deleteAudit(id: string): Promise<void> {
-  try {
-    const db = await openDB();
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    await new Promise<void>((resolve, reject) => {
-      const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  } catch (err) {
-    console.warn('IndexedDB delete failed:', err);
-  }
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).delete(id);
 }
