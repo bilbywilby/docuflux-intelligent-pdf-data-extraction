@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CostAnalysis, ACT_REFERENCE } from '@shared/types';
 /**
  * PA Medical Billing Audit Benchmarks & Legal References (Act 102)
  */
@@ -15,7 +16,7 @@ export const PA_COST_BENCHMARKS: Record<string, { avg: number; label: string }> 
   '85025': { avg: 25, label: 'CBC with Differential' },
   '36415': { avg: 15, label: 'Routine Venipuncture' },
 };
-export const ACT_102_REFERENCES = {
+export const ACT_102_REFERENCES: Record<string, ACT_REFERENCE> = {
   SEVERE_OVERCHARGE: {
     act: 'PA Act 102',
     citation: '§1421',
@@ -42,16 +43,6 @@ export const DocumentSchema = z.object({
   }),
 });
 export type DocumentData = z.infer<typeof DocumentSchema>;
-export interface CostAnalysis {
-  cpt: string;
-  label: string;
-  charged: number;
-  benchmark: number;
-  variance: number;
-  status: 'Normal' | 'Overpriced' | 'Severe';
-  citation?: typeof ACT_102_REFERENCES.SEVERE_OVERCHARGE;
-  financialNote?: string;
-}
 /**
  * Redacts PHI patterns to ensure privacy before display.
  */
